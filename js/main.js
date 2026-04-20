@@ -1,68 +1,53 @@
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-
-const WIDTH = canvas.width;
-const HEIGHT = canvas.height;
-
-let lastTime = performance.now();
-let dt = 0;
-
-let currentRoom = null;
-
-// Input
-const keys = {};
-window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
-
-// Game objects
-const player = new Player(WIDTH / 2, HEIGHT / 2);
+let renderer, scene, camera;
+let player;
+let world;
 let enemies = [];
 let chaosEffects = [];
-let glyphs = [];
 
-// Load first room
-function loadRoom() {
-  currentRoom = generateRoom();
-  enemies = currentRoom.enemies;
-  chaosEffects = rollChaosEffects();
+init();
+animate();
+
+function init() {
+  const canvas = document.getElementById("gameCanvas");
+
+  renderer = new THREE.WebGLRenderer({ canvas });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1); // retro look
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x000000, 0.08); // N64 fog
+
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+
+  player = new Player(camera);
+  world = new World(scene);
+
+  enemies = world.spawnEnemies();
+  chaosEffects = rollChaosEffects(scene, world, player, enemies);
+
+  window.addEventListener("resize", onResize);
 }
 
-loadRoom();
-
-// Main loop
-function gameLoop() {
-  const now = performance.now();
-  dt = (now - lastTime) / 1000;
-  lastTime = now;
-
-  update(dt);
-  draw();
-
-  requestAnimationFrame(gameLoop);
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function update(dt) {
-  applyChaos(dt, player, enemies);
+function animate() {
+  requestAnimationFrame(animate);
 
-  player.update(dt, keys);
+  const dt = 0.016;
 
+  applyChaos(dt, scene, world, player, enemies);
+
+  player.update(dt, world);
   enemies.forEach(e => e.update(dt, player));
-  enemies = enemies.filter(e => !e.dead);
 
-  if (enemies.length === 0 && keys["n"]) {
-    loadRoom();
-  }
+  renderer.render(scene, camera);
 }
-
-function draw() {
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-  currentRoom.draw(ctx);
-
-  player.draw(ctx);
-  enemies.forEach(e => e.draw(ctx));
-
-  drawChaosUI(ctx, chaosEffects);
-}
-
-gameLoop();
