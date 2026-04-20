@@ -2,22 +2,215 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chaos Dungeon 64 (3D)</title>
-  <link rel="stylesheet" href="css/style.css">
+  <title>Chaos Dungeon 64 - 2.5D Raycaster</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+      font-family: monospace;
+      color: #fff;
+    }
+    #gameCanvas {
+      display: block;
+      margin: 0 auto;
+      background: #050509;
+      image-rendering: pixelated;
+      border: 2px solid #333;
+    }
+    #overlay {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      font-size: 12px;
+      text-shadow: 0 0 4px #000;
+      pointer-events: none;
+    }
+  </style>
 </head>
 <body>
+<canvas id="gameCanvas" width="640" height="360"></canvas>
+<div id="overlay">
+  CHAOS DUNGEON 64 - 2.5D PROTOTYPE<br>
+  W/S = move, A/D = strafe, Q/E = turn<br>
+</div>
 
-<canvas id="gameCanvas"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+  const W = canvas.width;
+  const H = canvas.height;
 
-<script src="js/utils.js"></script>
-<script src="js/player.js"></script>
-<script src="js/world.js"></script>
-<script src="js/enemy.js"></script>
-<script src="js/chaos.js"></script>
-<script src="js/glyphs.js"></script>
-<script src="js/main.js"></script>
+  // Simple map (1 = wall, 0 = empty)
+  const MAP_W = 16;
+  const MAP_H = 16;
+  const map = [
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+  ];
 
+  function mapAt(x, y) {
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return 1;
+    return map[y * MAP_W + x];
+  }
+
+  const player = {
+    x: 3.5,
+    y: 3.5,
+    angle: 0,
+    moveSpeed: 3,
+    rotSpeed: 2.5
+  };
+
+  const keys = {};
+  window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+  window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+  let lastTime = performance.now();
+
+  function update(dt) {
+    // Rotation
+    if (keys['q']) player.angle -= player.rotSpeed * dt;
+    if (keys['e']) player.angle += player.rotSpeed * dt;
+
+    const cos = Math.cos(player.angle);
+    const sin = Math.sin(player.angle);
+
+    // Forward/back
+    let dx = 0, dy = 0;
+    if (keys['w']) {
+      dx += cos * player.moveSpeed * dt;
+      dy += sin * player.moveSpeed * dt;
+    }
+    if (keys['s']) {
+      dx -= cos * player.moveSpeed * dt;
+      dy -= sin * player.moveSpeed * dt;
+    }
+
+    // Strafe
+    if (keys['a']) {
+      dx += -sin * player.moveSpeed * dt;
+      dy += cos * player.moveSpeed * dt;
+    }
+    if (keys['d']) {
+      dx += sin * player.moveSpeed * dt;
+      dy += -cos * player.moveSpeed * dt;
+    }
+
+    // Collision
+    const newX = player.x + dx;
+    const newY = player.y + dy;
+    if (mapAt(newX | 0, player.y | 0) === 0) player.x = newX;
+    if (mapAt(player.x | 0, newY | 0) === 0) player.y = newY;
+  }
+
+  function castRays() {
+    // Chaos: FOV warps over time
+    const t = performance.now() * 0.001;
+    const baseFov = Math.PI / 3;
+    const fov = baseFov + Math.sin(t * 0.7) * 0.15; // chaos FOV
+
+    const numRays = W;
+    const halfFov = fov / 2;
+
+    for (let x = 0; x < numRays; x++) {
+      const rayScreenPos = (x / numRays) - 0.5;
+      const rayAngle = player.angle + rayScreenPos * fov;
+
+      const rayDirX = Math.cos(rayAngle);
+      const rayDirY = Math.sin(rayAngle);
+
+      let dist = 0;
+      let hit = false;
+      let hitWallType = 0;
+
+      const maxDist = 20;
+      const step = 0.02;
+
+      let rx = player.x;
+      let ry = player.y;
+
+      while (!hit && dist < maxDist) {
+        dist += step;
+        rx = player.x + rayDirX * dist;
+        ry = player.y + rayDirY * dist;
+
+        const mx = rx | 0;
+        const my = ry | 0;
+        const cell = mapAt(mx, my);
+        if (cell > 0) {
+          hit = true;
+          hitWallType = cell;
+        }
+      }
+
+      if (hit) {
+        // Fix fish-eye
+        const correctedDist = dist * Math.cos(rayAngle - player.angle);
+        const wallHeight = (H / correctedDist) * 0.9;
+
+        const shade = Math.max(0, 1 - correctedDist / maxDist);
+        const baseColor = hitWallType === 1 ? [60, 60, 120] : [120, 60, 60];
+        const r = (baseColor[0] * shade) | 0;
+        const g = (baseColor[1] * shade) | 0;
+        const b = (baseColor[2] * shade) | 0;
+
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        const y = (H / 2) - wallHeight / 2;
+        ctx.fillRect(x, y, 1, wallHeight);
+      } else {
+        // No hit, draw nothing (background already cleared)
+      }
+    }
+  }
+
+  function drawFloorAndCeiling() {
+    const horizon = H / 2;
+    // Ceiling
+    const t = performance.now() * 0.001;
+    const fog = 40 + Math.sin(t * 0.5) * 20; // chaos fog-ish color shift
+
+    ctx.fillStyle = `rgb(${fog|0}, ${fog|0}, ${fog+20|0})`;
+    ctx.fillRect(0, 0, W, horizon);
+
+    // Floor
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, horizon, W, horizon);
+  }
+
+  function loop() {
+    const now = performance.now();
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+
+    update(dt);
+
+    ctx.clearRect(0, 0, W, H);
+    drawFloorAndCeiling();
+    castRays();
+
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+})();
+</script>
 </body>
 </html>
