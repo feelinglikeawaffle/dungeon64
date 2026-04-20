@@ -1,31 +1,24 @@
 class Enemy {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.speed = 60;
-    this.radius = 10;
-    this.dead = false;
+  constructor(x, z) {
+    const tex = new THREE.TextureLoader().load("assets/enemy.png");
+    const mat = new THREE.SpriteMaterial({ map: tex });
+
+    this.sprite = new THREE.Sprite(mat);
+    this.sprite.position.set(x, 1.5, z);
+    this.sprite.scale.set(1.5, 1.5, 1.5);
+
+    scene.add(this.sprite);
+    this.speed = 1.2;
   }
 
   update(dt, player) {
-    const dx = player.x - this.x;
-    const dy = player.y - this.y;
-    const dist = Math.hypot(dx, dy);
+    const dir = new THREE.Vector3().subVectors(
+      player.camera.position,
+      this.sprite.position
+    );
+    dir.y = 0;
+    dir.normalize();
 
-    if (dist > 1) {
-      this.x += (dx / dist) * this.speed * dt;
-      this.y += (dy / dist) * this.speed * dt;
-    }
-
-    if (dist < this.radius + player.radius) {
-      this.dead = true;
-    }
-  }
-
-  draw(ctx) {
-    ctx.fillStyle = "#ff4444";
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    this.sprite.position.addScaledVector(dir, this.speed * dt);
   }
 }
