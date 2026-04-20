@@ -1,35 +1,19 @@
-function rollChaosEffects() {
-  const effects = [
-    { name: "Slippery Floor", apply: chaos_slippery },
-    { name: "Low Gravity", apply: chaos_lowGravity },
-    { name: "Time Warp", apply: chaos_timeWarp }
+function rollChaosEffects(scene, world, player, enemies) {
+  return [
+    chaos_roomSpin,
+    chaos_fogPulse
   ];
-
-  return [effects[Math.floor(Math.random() * effects.length)]];
 }
 
-function applyChaos(dt, player, enemies) {
-  chaosEffects.forEach(effect => effect.apply(dt, player, enemies));
+function applyChaos(dt, scene, world, player, enemies) {
+  chaosEffects.forEach(fn => fn(dt, scene, world, player, enemies));
 }
 
-function chaos_slippery(dt, player) {
-  player.speed = 220;
+function chaos_roomSpin(dt, scene) {
+  scene.rotation.y += dt * 0.2;
 }
 
-function chaos_lowGravity(dt, player) {
-  player.y -= Math.sin(performance.now() * 0.002) * 10 * dt;
-}
-
-function chaos_timeWarp(dt, player, enemies) {
-  if (Math.sin(performance.now() * 0.001) > 0) {
-    enemies.forEach(e => e.speed = 20);
-  } else {
-    enemies.forEach(e => e.speed = 120);
-  }
-}
-
-function drawChaosUI(ctx, chaosEffects) {
-  ctx.fillStyle = "#fff";
-  ctx.font = "14px monospace";
-  ctx.fillText("Chaos: " + chaosEffects.map(c => c.name).join(", "), 10, 20);
+function chaos_fogPulse(dt, scene) {
+  const t = performance.now() * 0.001;
+  scene.fog.density = 0.06 + Math.sin(t) * 0.03;
 }
