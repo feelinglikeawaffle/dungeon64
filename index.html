@@ -124,7 +124,7 @@
   // -----------------------------
   // PIXELATED TEXTURE SAMPLING
   // -----------------------------
-  function sampleTexture(tex, u, v, pixelSize = 8) {
+  function sampleTexture(tex, u, v, pixelSize = 3) {
     if (!tex.data) return [255, 0, 255];
 
     const tw = tex.width;
@@ -187,7 +187,7 @@
       for (let y = 0; y < horizon; y++) {
         const skyV = y / horizon;
 
-        const [r, g, b] = sampleTexture(skyTex, skyU, skyV, 8);
+        const [r, g, b] = sampleTexture(skyTex, skyU, skyV, 3);
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(x, y, 1, 1);
       }
