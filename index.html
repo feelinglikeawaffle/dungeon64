@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chaos Dungeon 64 - 2.5D Raycaster</title>
+  <title>Chaos Dungeon 64 - 2.5D Pixelated Textures</title>
   <style>
     html, body {
       margin: 0;
@@ -32,8 +32,8 @@
 <body>
 <canvas id="gameCanvas" width="640" height="360"></canvas>
 <div id="overlay">
-  CHAOS DUNGEON 64 - 2.5D PROTOTYPE<br>
-  W/S = move, A/D = strafe, Q/E = turn<br>
+  CHAOS DUNGEON 64 - 2.5D PIXELATED TEXTURES<br>
+  W/S = move, A/D = turn<br>
 </div>
 
 <script>
@@ -44,7 +44,9 @@
   const W = canvas.width;
   const H = canvas.height;
 
-  // Simple map (1 = wall, 0 = empty)
+  // -----------------------------
+  // MAP
+  // -----------------------------
   const MAP_W = 16;
   const MAP_H = 16;
   const map = [
@@ -52,9 +54,9 @@
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
@@ -71,6 +73,9 @@
     return map[y * MAP_W + x];
   }
 
+  // -----------------------------
+  // PLAYER
+  // -----------------------------
   const player = {
     x: 3.5,
     y: 3.5,
@@ -83,47 +88,118 @@
   window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
   window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
+  // -----------------------------
+  // TEXTURE LOADING
+  // -----------------------------
+  const wallTex = new Image();
+  wallTex.src = "assets/textures/walls/wall1.png";
+
+  const floorTex = new Image();
+  floorTex.src = "assets/textures/floor/floor1.png";
+
+  const skyTex = new Image();
+  skyTex.src = "assets/textures/sky/sky1.png";
+
+  function loadTexture(img, callback) {
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const cx = c.getContext("2d");
+      cx.drawImage(img, 0, 0);
+      img.data = cx.getImageData(0, 0, img.width, img.height).data;
+      callback();
+    };
+  }
+
+  let texturesLoaded = 0;
+  function texLoaded() {
+    texturesLoaded++;
+  }
+
+  loadTexture(wallTex, texLoaded);
+  loadTexture(floorTex, texLoaded);
+  loadTexture(skyTex, texLoaded);
+
+  // -----------------------------
+  // PIXELATED TEXTURE SAMPLING
+  // -----------------------------
+  function sampleTexture(tex, u, v, pixelSize = 8) {
+    if (!tex.data) return [255, 0, 255];
+
+    const tw = tex.width;
+    const th = tex.height;
+
+    let x = Math.floor(u * tw / pixelSize) * pixelSize;
+    let y = Math.floor(v * th / pixelSize) * pixelSize;
+
+    x = Math.max(0, Math.min(tw - 1, x));
+    y = Math.max(0, Math.min(th - 1, y));
+
+    const index = (y * tw + x) * 4;
+    return [
+      tex.data[index],
+      tex.data[index + 1],
+      tex.data[index + 2]
+    ];
+  }
+
+  // -----------------------------
+  // UPDATE
+  // -----------------------------
   let lastTime = performance.now();
 
   function update(dt) {
-  // Rotation
-  if (keys['q']) player.angle -= player.rotSpeed * dt;
-  if (keys['e']) player.angle += player.rotSpeed * dt;
+    // A/D rotate camera
+    if (keys['a']) player.angle -= player.rotSpeed * dt;
+    if (keys['d']) player.angle += player.rotSpeed * dt;
 
-  // NEW: A/D rotate camera
-  if (keys['a']) player.angle -= player.rotSpeed * dt;
-  if (keys['d']) player.angle += player.rotSpeed * dt;
+    const cos = Math.cos(player.angle);
+    const sin = Math.sin(player.angle);
 
-  const cos = Math.cos(player.angle);
-  const sin = Math.sin(player.angle);
+    let dx = 0, dy = 0;
 
-  let dx = 0, dy = 0;
+    if (keys['w']) {
+      dx += cos * player.moveSpeed * dt;
+      dy += sin * player.moveSpeed * dt;
+    }
+    if (keys['s']) {
+      dx -= cos * player.moveSpeed * dt;
+      dy -= sin * player.moveSpeed * dt;
+    }
 
-  // Forward/back
-  if (keys['w']) {
-    dx += cos * player.moveSpeed * dt;
-    dy += sin * player.moveSpeed * dt;
+    const newX = player.x + dx;
+    const newY = player.y + dy;
+
+    if (mapAt(newX | 0, player.y | 0) === 0) player.x = newX;
+    if (mapAt(player.x | 0, newY | 0) === 0) player.y = newY;
   }
-  if (keys['s']) {
-    dx -= cos * player.moveSpeed * dt;
-    dy -= sin * player.moveSpeed * dt;
+
+  // -----------------------------
+  // DRAW SKY
+  // -----------------------------
+  function drawSky() {
+    const horizon = H / 2;
+
+    for (let x = 0; x < W; x++) {
+      const skyU = ((player.angle / (Math.PI * 2)) + (x / W)) % 1;
+
+      for (let y = 0; y < horizon; y++) {
+        const skyV = y / horizon;
+
+        const [r, g, b] = sampleTexture(skyTex, skyU, skyV, 8);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
   }
 
-  // Collision
-  const newX = player.x + dx;
-  const newY = player.y + dy;
-  if (mapAt(newX | 0, player.y | 0) === 0) player.x = newX;
-  if (mapAt(player.x | 0, newY | 0) === 0) player.y = newY;
-}
-
+  // -----------------------------
+  // RAYCAST
+  // -----------------------------
   function castRays() {
-    // Chaos: FOV warps over time
-    const t = performance.now() * 0.001;
-    const baseFov = Math.PI / 3;
-    const fov = baseFov + Math.sin(t * 0.7) * 0.15; // chaos FOV
-
+    const fov = Math.PI / 3;
     const numRays = W;
-    const halfFov = fov / 2;
 
     for (let x = 0; x < numRays; x++) {
       const rayScreenPos = (x / numRays) - 0.5;
@@ -134,7 +210,6 @@
 
       let dist = 0;
       let hit = false;
-      let hitWallType = 0;
 
       const maxDist = 20;
       const step = 0.02;
@@ -149,48 +224,57 @@
 
         const mx = rx | 0;
         const my = ry | 0;
-        const cell = mapAt(mx, my);
-        if (cell > 0) {
+
+        if (mapAt(mx, my) === 1) {
           hit = true;
-          hitWallType = cell;
         }
       }
 
       if (hit) {
-        // Fix fish-eye
         const correctedDist = dist * Math.cos(rayAngle - player.angle);
         const wallHeight = (H / correctedDist) * 0.9;
+        const y = (H / 2) - wallHeight / 2;
 
-        const shade = Math.max(0, 1 - correctedDist / maxDist);
-        const baseColor = hitWallType === 1 ? [60, 60, 120] : [120, 60, 60];
-        const r = (baseColor[0] * shade) | 0;
-        const g = (baseColor[1] * shade) | 0;
-        const b = (baseColor[2] * shade) | 0;
+        const texU = (rx % 1 + 1) % 1;
+        const texV = (dist % 1);
+
+        const [r, g, b] = sampleTexture(wallTex, texU, texV, 8);
 
         ctx.fillStyle = `rgb(${r},${g},${b})`;
-        const y = (H / 2) - wallHeight / 2;
         ctx.fillRect(x, y, 1, wallHeight);
-      } else {
-        // No hit, draw nothing (background already cleared)
       }
     }
   }
 
-  function drawFloorAndCeiling() {
+  // -----------------------------
+  // FLOOR
+  // -----------------------------
+  function drawFloor() {
     const horizon = H / 2;
-    // Ceiling
-    const t = performance.now() * 0.001;
-    const fog = 40 + Math.sin(t * 0.5) * 20; // chaos fog-ish color shift
 
-    ctx.fillStyle = `rgb(${fog|0}, ${fog|0}, ${fog+20|0})`;
-    ctx.fillRect(0, 0, W, horizon);
+    for (let y = horizon; y < H; y++) {
+      const rowDist = (player.y + (y - horizon) / H * 5);
 
-    // Floor
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(0, horizon, W, horizon);
+      for (let x = 0; x < W; x++) {
+        const u = (x / W);
+        const v = (y - horizon) / (H - horizon);
+
+        const [r, g, b] = sampleTexture(floorTex, u, v, 8);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
   }
 
+  // -----------------------------
+  // MAIN LOOP
+  // -----------------------------
   function loop() {
+    if (texturesLoaded < 3) {
+      requestAnimationFrame(loop);
+      return;
+    }
+
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
     lastTime = now;
@@ -198,7 +282,9 @@
     update(dt);
 
     ctx.clearRect(0, 0, W, H);
-    drawFloorAndCeiling();
+
+    drawSky();
+    drawFloor();
     castRays();
 
     requestAnimationFrame(loop);
@@ -209,4 +295,3 @@
 </script>
 </body>
 </html>
-/
