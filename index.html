@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chaos Dungeon 64 - 2.5D Pixelated Textures</title>
+  <title>Chaos Dungeon 64 - Clean 2.5D Engine</title>
   <style>
     html, body {
       margin: 0;
@@ -32,7 +32,7 @@
 <body>
 <canvas id="gameCanvas" width="640" height="360"></canvas>
 <div id="overlay">
-  CHAOS DUNGEON 64 - 2.5D PIXELATED TEXTURES<br>
+  CHAOS DUNGEON 64 - CLEAN ENGINE<br>
   W/S = move, A/D = turn<br>
 </div>
 
@@ -94,12 +94,6 @@
   const wallTex = new Image();
   wallTex.src = "assets/textures/walls/wall1.png";
 
-  const floorTex = new Image();
-  floorTex.src = "assets/textures/floor/floor1.png";
-
-  const skyTex = new Image();
-  skyTex.src = "assets/textures/sky/sky1.png";
-
   function loadTexture(img, callback) {
     img.onload = () => {
       const c = document.createElement("canvas");
@@ -113,36 +107,7 @@
   }
 
   let texturesLoaded = 0;
-  function texLoaded() {
-    texturesLoaded++;
-  }
-
-  loadTexture(wallTex, texLoaded);
-  loadTexture(floorTex, texLoaded);
-  loadTexture(skyTex, texLoaded);
-
-  // -----------------------------
-  // PIXELATED TEXTURE SAMPLING
-  // -----------------------------
-  function sampleTexture(tex, u, v, pixelSize = 3) {
-    if (!tex.data) return [255, 0, 255];
-
-    const tw = tex.width;
-    const th = tex.height;
-
-    let x = Math.floor(u * tw / pixelSize) * pixelSize;
-    let y = Math.floor(v * th / pixelSize) * pixelSize;
-
-    x = Math.max(0, Math.min(tw - 1, x));
-    y = Math.max(0, Math.min(th - 1, y));
-
-    const index = (y * tw + x) * 4;
-    return [
-      tex.data[index],
-      tex.data[index + 1],
-      tex.data[index + 2]
-    ];
-  }
+  loadTexture(wallTex, () => texturesLoaded++);
 
   // -----------------------------
   // UPDATE
@@ -176,22 +141,18 @@
   }
 
   // -----------------------------
-  // DRAW SKY
+  // DRAW SKY + FLOOR
   // -----------------------------
   function drawSky() {
     const horizon = H / 2;
+    ctx.fillStyle = "#334";
+    ctx.fillRect(0, 0, W, horizon);
+  }
 
-    for (let x = 0; x < W; x++) {
-      const skyU = ((player.angle / (Math.PI * 2)) + (x / W)) % 1;
-
-      for (let y = 0; y < horizon; y++) {
-        const skyV = y / horizon;
-
-        const [r, g, b] = sampleTexture(skyTex, skyU, skyV, 3);
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
+  function drawFloor() {
+    const horizon = H / 2;
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, horizon, W, horizon);
   }
 
   // -----------------------------
@@ -235,32 +196,28 @@
         const wallHeight = (H / correctedDist) * 0.9;
         const y = (H / 2) - wallHeight / 2;
 
-        const texU = (rx % 1 + 1) % 1;
-        const texV = (dist % 1);
+        const texX = Math.floor(((rx % 1 + 1) % 1) * wallTex.width);
 
-        const [r, g, b] = sampleTexture(wallTex, texU, texV, 8);
+        for (let yy = 0; yy < wallHeight; yy++) {
+          const texY = Math.floor((yy / wallHeight) * wallTex.height);
+          const index = (texY * wallTex.width + texX) * 4;
 
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(x, y, 1, wallHeight);
+          const r = wallTex.data[index];
+          const g = wallTex.data[index + 1];
+          const b = wallTex.data[index + 2];
+
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillRect(x, y + yy, 1, 1);
+        }
       }
     }
   }
 
   // -----------------------------
-  // FLOOR
-  // -----------------------------
-  function drawFloor() {
-  const horizon = H / 2;
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0, horizon, W, horizon);
-}
-
-
-  // -----------------------------
   // MAIN LOOP
   // -----------------------------
   function loop() {
-    if (texturesLoaded < 3) {
+    if (texturesLoaded < 1) {
       requestAnimationFrame(loop);
       return;
     }
