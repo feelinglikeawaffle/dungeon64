@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chaos Dungeon 64 - Clean 2.5D Engine</title>
+  <title>Chaos Dungeon 64 - Clean 2.5D Engine (Fixed)</title>
   <style>
     html, body {
       margin: 0;
@@ -156,7 +156,7 @@
   }
 
   // -----------------------------
-  // RAYCAST
+  // RAYCAST (FIXED TEXTURE TILING)
   // -----------------------------
   function castRays() {
     const fov = Math.PI / 3;
@@ -191,26 +191,27 @@
         }
       }
 
-     if (hit) {
-  const correctedDist = dist * Math.cos(rayAngle - player.angle);
-  const wallHeight = (H / correctedDist) * 0.9;
-  const yStart = (H / 2) - wallHeight / 2;
+      if (hit) {
+        const correctedDist = dist * Math.cos(rayAngle - player.angle);
+        const wallHeight = (H / correctedDist) * 0.9;
+        const yStart = (H / 2) - wallHeight / 2;
 
-  const texX = Math.floor(((rx % 1 + 1) % 1) * wallTex.width);
+        const texX = Math.floor(((rx % 1 + 1) % 1) * wallTex.width);
 
-  for (let yy = 0; yy < wallHeight; yy++) {
-    const texY = Math.floor(yy % wallTex.height);
-    const index = (texY * wallTex.width + texX) * 4;
+        for (let yy = 0; yy < wallHeight; yy++) {
+          const texY = Math.floor(yy % wallTex.height);
+          const index = (texY * wallTex.width + texX) * 4;
 
-    const r = wallTex.data[index];
-    const g = wallTex.data[index + 1];
-    const b = wallTex.data[index + 2];
+          const r = wallTex.data[index];
+          const g = wallTex.data[index + 1];
+          const b = wallTex.data[index + 2];
 
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(x, yStart + yy, 1, 1);
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillRect(x, yStart + yy, 1, 1);
+        }
+      }
+    }
   }
-}
-
 
   // -----------------------------
   // MAIN LOOP
