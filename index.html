@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chaos Dungeon 64 - Procedural 2.5D</title>
+  <title>Chaos Dungeon 64 - Full Prototype</title>
   <style>
     html, body {
       margin: 0;
@@ -32,8 +32,8 @@
 <body>
 <canvas id="gameCanvas" width="640" height="360"></canvas>
 <div id="overlay">
-  CHAOS DUNGEON 64 - PROCEDURAL<br>
-  W/S = move, A/D = turn
+  CHAOS DUNGEON 64 - FULL PROTOTYPE<br>
+  W/S = move, A/D = turn, B = shoot
 </div>
 
 <script>
@@ -44,11 +44,11 @@
   const H = canvas.height;
 
   // -----------------------------
-  // PROCEDURAL MAP GENERATION
+  // MAP + PROCEDURAL GENERATION
   // -----------------------------
   const MAP_W = 32;
   const MAP_H = 32;
-  let map = new Array(MAP_W * MAP_H).fill(1); // start all walls
+  let map = new Array(MAP_W * MAP_H).fill(1);
 
   function carveRoom(x, y, w, h) {
     for (let iy = y; iy < y + h; iy++) {
@@ -61,10 +61,9 @@
   }
 
   function generateMap() {
-    // Start with a central room
+    map.fill(1);
     carveRoom(14, 14, 4, 4);
 
-    // Carve random rooms
     for (let i = 0; i < 20; i++) {
       const rw = 3 + Math.floor(Math.random() * 6);
       const rh = 3 + Math.floor(Math.random() * 6);
@@ -73,7 +72,6 @@
       carveRoom(rx, ry, rw, rh);
     }
 
-    // Carve random corridors
     for (let i = 0; i < 40; i++) {
       const x = Math.floor(Math.random() * MAP_W);
       const y = Math.floor(Math.random() * MAP_H);
@@ -81,8 +79,6 @@
       if (y > 1 && y < MAP_H - 1) map[y * MAP_W + x] = 0;
     }
   }
-
-  generateMap();
 
   function mapAt(x, y) {
     if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return 1;
@@ -99,13 +95,188 @@
     dirY: 0,
     planeX: 0,
     planeY: 0.66,
+    basePlaneY: 0.66,
     moveSpeed: 3,
-    rotSpeed: 2.5
+    rotSpeed: 2.5,
+    health: 100,
+    hasGun: true
   };
 
   const keys = {};
   window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
   window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+  // -----------------------------
+  // ENEMIES
+  // -----------------------------
+  let enemies = [];
+
+  const ENEMY_TYPES = [
+    { color: "red", speed: 1.2, hp: 1 },
+    { color: "orange", speed: 1.6, hp: 2 },
+    { color: "purple", speed: 0.8, hp: 3 }
+  ];
+
+  function spawnEnemies(count) {
+    enemies = [];
+    for (let i = 0; i < count; i++) {
+      let ex, ey;
+      do {
+        ex = Math.floor(Math.random() * MAP_W);
+        ey = Math.floor(Math.random() * MAP_H);
+      } while (mapAt(ex, ey) !== 0);
+
+      const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+      enemies.push({
+        x: ex + 0.5,
+        y: ey + 0.5,
+        alive: true,
+        color: type.color,
+        speed: type.speed,
+        hp: type.hp,
+        wanderTimer: Math.random() * 2,
+        vx: 0,
+        vy: 0
+      });
+    }
+  }
+
+  // -----------------------------
+  // GATE / LEVEL PROGRESSION
+  // -----------------------------
+  let gateOpen = false;
+  let gateX = 2;
+  let gateY = 2;
+
+  function placeGate() {
+    let gx, gy;
+    do {
+      gx = Math.floor(Math.random() * MAP_W);
+      gy = Math.floor(Math.random() * MAP_H);
+    } while (mapAt(gx, gy) !== 0);
+    gateX = gx;
+    gateY = gy;
+    map[gateY * MAP_W + gateX] = 1; // closed gate = wall
+    gateOpen = false;
+  }
+
+  function updateGate() {
+    if (!gateOpen) {
+      const alive = enemies.some(e => e.alive);
+      if (!alive) {
+        gateOpen = true;
+        map[gateY * MAP_W + gateX] = 0; // open gate
+      }
+    }
+  }
+
+  function nextLevel() {
+    generateMap();
+    spawnEnemies(10);
+    placeGate();
+    player.x = 16;
+    player.y = 16;
+  }
+
+  // -----------------------------
+  // SHOOTING / GUN
+  // -----------------------------
+  let shootCooldown = 0;
+  let muzzleFlashTimer = 0;
+
+  function shoot() {
+    if (shootCooldown > 0) return;
+    shootCooldown = 0.3;
+    muzzleFlashTimer = 0.1;
+
+    const rayDirX = player.dirX;
+    const rayDirY = player.dirY;
+
+    let closestEnemy = null;
+    let closestDist = Infinity;
+
+    enemies.forEach(e => {
+      if (!e.alive) return;
+
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      const dot = dx * rayDirX + dy * rayDirY;
+      if (dot > 0 && dist < 10) {
+        const cross = Math.abs(dx * rayDirY - dy * rayDirX);
+        if (cross < 0.5) {
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestEnemy = e;
+          }
+        }
+      }
+    });
+
+    if (closestEnemy) {
+      closestEnemy.hp -= 1;
+      if (closestEnemy.hp <= 0) {
+        closestEnemy.alive = false;
+      }
+    }
+  }
+
+  // -----------------------------
+  // ENEMY AI + DAMAGE
+  // -----------------------------
+  function updateEnemies(dt) {
+    enemies.forEach(e => {
+      if (!e.alive) return;
+
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      if (dist < 0.6) {
+        player.health -= 10 * dt;
+        if (player.health < 0) player.health = 0;
+      }
+
+      if (dist < 8) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const speed = e.speed * dt;
+        const tx = e.x + nx * speed;
+        const ty = e.y + ny * speed;
+        if (mapAt(tx | 0, e.y | 0) === 0) e.x = tx;
+        if (mapAt(e.x | 0, ty | 0) === 0) e.y = ty;
+      } else {
+        e.wanderTimer -= dt;
+        if (e.wanderTimer <= 0) {
+          e.wanderTimer = 1 + Math.random() * 2;
+          const angle = Math.random() * Math.PI * 2;
+          e.vx = Math.cos(angle) * e.speed;
+          e.vy = Math.sin(angle) * e.speed;
+        }
+        const tx = e.x + e.vx * dt;
+        const ty = e.y + e.vy * dt;
+        if (mapAt(tx | 0, e.y | 0) === 0) e.x = tx;
+        if (mapAt(e.x | 0, ty | 0) === 0) e.y = ty;
+      }
+    });
+  }
+
+  // -----------------------------
+  // CHAOS EFFECTS
+  // -----------------------------
+  let chaosTime = 0;
+
+  function updateChaos(dt) {
+    chaosTime += dt;
+    const fovPulse = Math.sin(chaosTime * 0.7) * 0.15;
+    player.planeY = player.basePlaneY + fovPulse;
+  }
+
+  function getScreenShake() {
+    const mag = Math.sin(chaosTime * 3) * 2;
+    return { x: mag, y: mag * 0.5 };
+  }
 
   // -----------------------------
   // UPDATE
@@ -129,6 +300,23 @@
       const ny = player.y - player.dirY * move;
       if (mapAt(nx | 0, player.y | 0) === 0) player.x = nx;
       if (mapAt(player.x | 0, ny | 0) === 0) player.y = ny;
+    }
+
+    if (keys['b']) shoot();
+
+    if (shootCooldown > 0) shootCooldown -= dt;
+    if (shootCooldown < 0) shootCooldown = 0;
+    if (muzzleFlashTimer > 0) muzzleFlashTimer -= dt;
+    if (muzzleFlashTimer < 0) muzzleFlashTimer = 0;
+
+    updateEnemies(dt);
+    updateGate();
+    updateChaos(dt);
+
+    if (gateOpen) {
+      if ((player.x | 0) === gateX && (player.y | 0) === gateY) {
+        nextLevel();
+      }
     }
   }
 
@@ -157,9 +345,13 @@
   }
 
   // -----------------------------
-  // RAYCAST (SOLID COLORS)
+  // RAYCAST (SOLID COLOR WALLS)
   // -----------------------------
   function castRays() {
+    const shake = getScreenShake();
+    ctx.save();
+    ctx.translate(shake.x, shake.y);
+
     for (let x = 0; x < W; x++) {
       const cameraX = 2 * x / W - 1;
       const rayDirX = player.dirX + player.planeX * cameraX;
@@ -217,12 +409,68 @@
       if (end >= H) end = H - 1;
 
       const shade = side === 1 ? 0.7 : 1.0;
-      const r = (80 * shade) | 0;
-      const g = (80 * shade) | 0;
-      const b = (160 * shade) | 0;
+      const baseR = 80 + Math.sin(chaosTime * 2) * 40;
+      const baseG = 80;
+      const baseB = 160 + Math.cos(chaosTime * 1.5) * 40;
+
+      const r = (baseR * shade) | 0;
+      const g = (baseG * shade) | 0;
+      const b = (baseB * shade) | 0;
 
       ctx.fillStyle = `rgb(${r},${g},${b})`;
       ctx.fillRect(x, start, 1, end - start);
+    }
+
+    ctx.restore();
+  }
+
+  // -----------------------------
+  // DRAW ENEMIES
+  // -----------------------------
+  function drawEnemies() {
+    enemies.forEach(e => {
+      if (!e.alive) return;
+
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+
+      const invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
+      const transformX = invDet * (player.dirY * dx - player.dirX * dy);
+      const transformY = invDet * (-player.planeY * dx + player.planeX * dy);
+
+      if (transformY <= 0) return;
+
+      const spriteScreenX = (W / 2) * (1 + transformX / transformY);
+      const size = Math.floor(H / transformY);
+      const startY = Math.floor(H / 2 - size / 2);
+      const startX = Math.floor(spriteScreenX - size / 2);
+
+      ctx.fillStyle = e.color;
+      ctx.fillRect(startX, startY, size, size);
+    });
+  }
+
+  // -----------------------------
+  // HUD + GUN
+  // -----------------------------
+  function drawHUD() {
+    ctx.fillStyle = "black";
+    ctx.fillRect(10, 10, 104, 14);
+    ctx.fillStyle = "red";
+    ctx.fillRect(12, 12, Math.max(0, player.health), 10);
+
+    // Gun
+    const gunWidth = 80;
+    const gunHeight = 40;
+    const gx = W / 2 - gunWidth / 2;
+    const gy = H - gunHeight - 10;
+
+    ctx.fillStyle = "#333";
+    ctx.fillRect(gx, gy, gunWidth, gunHeight);
+
+    if (muzzleFlashTimer > 0) {
+      ctx.fillStyle = "yellow";
+      ctx.fillRect(gx + gunWidth / 2 - 10, gy - 10, 20, 20);
     }
   }
 
@@ -239,10 +487,18 @@
     ctx.clearRect(0, 0, W, H);
     drawSkyFloor();
     castRays();
+    drawEnemies();
+    drawHUD();
 
     requestAnimationFrame(loop);
   }
 
+  // -----------------------------
+  // INIT
+  // -----------------------------
+  generateMap();
+  spawnEnemies(10);
+  placeGate();
   loop();
 })();
 </script>
